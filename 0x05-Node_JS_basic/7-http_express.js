@@ -1,82 +1,63 @@
-#!/usr/bin/env node
-
-/* eslint-disable no-param-reassign */
-/* eslint-disable no-unused-vars */
-
-const { promisify } = require('util');
-const { readFile } = require('fs');
 const express = require('express');
 
-const PORT = 1245;
-const HOST = '127.0.0.1';
+const { readFile } = require('fs');
+
 const app = express();
-const readFileAsync = promisify(readFile);
+const port = 1245;
 
-function parseCsvLine(line) {
-  return line.split(',').map((item) => item.trim());
-}
-
-async function countStudents(fileName) {
+function countStudents(fileName) {
   const students = {};
   const fields = {};
-
-  try {
-    const data = await readFileAsync(fileName, 'utf-8');
-    const lines = data.trim().split('\n');
-    lines.shift(); // Remove header line
-    lines.forEach((line) => {
-      const [firstName, , , field] = parseCsvLine(line);
-
-      students[field] = students[field] || [];
-      students[field].push(firstName);
-
-      fields[field] = (fields[field] || 0) + 1;
-    });
-
-    const totalStudents = lines.length;
-    const results = {
-      totalStudents,
-      fields: {},
-    };
-
-    for (const [key, value] of Object.entries(fields)) {
-      if (key !== 'field') {
-        results.fields[key] = {
-          numberOfStudents: value,
-          studentList: students[key].join(', '),
-        };
+  let length = 0;
+  return new Promise((resolve, reject) => {
+    readFile(fileName, (err, data) => {
+      if (err) {
+        reject(err);
+      } else {
+        let output = '';
+        const lines = data.toString().split('\n');
+        for (let i = 0; i < lines.length; i += 1) {
+          if (lines[i]) {
+            length += 1;
+            const field = lines[i].toString().split(',');
+            if (Object.prototype.hasOwnProperty.call(students, field[3])) {
+              students[field[3]].push(field[0]);
+            } else {
+              students[field[3]] = [field[0]];
+            }
+            if (Object.prototype.hasOwnProperty.call(fields, field[3])) {
+              fields[field[3]] += 1;
+            } else {
+              fields[field[3]] = 1;
+            }
+          }
+        }
+        const l = length - 1;
+        output += `Number of students: ${l}\n`;
+        for (const [key, value] of Object.entries(fields)) {
+          if (key !== 'field') {
+            output += `Number of students in ${key}: ${value}. `;
+            output += `List: ${students[key].join(', ')}\n`;
+          }
+        }
+        resolve(output);
       }
-    }
-
-    return results;
-  } catch (error) {
-    throw new Error('Cannot load the database');
-  }
+    });
+  });
 }
 
-app.get('/', (req, resp) => {
-  resp.statusCode = 200;
-  resp.setHeader('Content-Type', 'text/plain');
-  resp.setHeader('X-Served-By', 'itsfoss');
-  resp.send('Hello Holberton School!');
+app.get('/', (req, res) => {
+  res.send('Hello Holberton School!');
+});
+app.get('/students', (req, res) => {
+  countStudents(process.argv[2].toString()).then((output) => {
+    res.send(['This is the list of our students', output].join('\n'));
+  }).catch(() => {
+    res.send('This is the list of our students\nCannot load the database');
+  });
 });
 
-app.get('/students', (req, resp) => {
-  countStudents(process.argv[2]).then((data) => {
-    resp.write('This is the list of our students\n');
-    resp.write(`Number of students: ${data.totalStudents}\n`);
-    for (const [fieldName, fieldData] of Object.entries(data.fields)) {
-      resp.write(`Number of students in ${fieldName}: ${fieldData.numberOfStudents}. List: ${fieldData.studentList}\n`);
-    }
-
-    resp.end();
-  })
-    .catch((error) => {
-      resp.statusCode = 404;
-      resp.write('This is the list of our students\n');
-      resp.end('Cannot load the database\n');
-    });
+app.listen(port, () => {
 });
-app.listen(PORT, HOST, () => {});
 
 module.exports = app;
